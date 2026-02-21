@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KahootBoard — Portal de Notas</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0d0f; --surface: #16161a; --surface2: #1e1e24; --border: #2a2a35;
+    --accent: #7c5cfc; --accent2: #fc5c7d; --accent3: #5cf7fc;
+    --text: #f0f0f5; --muted: #7a7a90;
+    --success: #4ade80; --warning: #facc15; --danger: #f87171;
+    --radius: 14px; --radius-sm: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+  body::before { content: ''; position: fixed; top: -200px; left: -200px; width: 600px; height: 600px; background: radial-gradient(circle, rgba(124,92,252,0.12) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+  body::after  { content: ''; position: fixed; bottom: -200px; right: -200px; width: 500px; height: 500px; background: radial-gradient(circle, rgba(252,92,125,0.08) 0%, transparent 70%); pointer-events: none; z-index: 0; }
+
+  .screen { display: none; position: relative; z-index: 1; }
+  .screen.active { display: block; }
+
+  /* LOGIN */
+  #loginScreen { min-height: 100vh; display: none; align-items: center; justify-content: center; }
+  #loginScreen.active { display: flex; }
+  .login-box { background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 48px 44px; width: 100%; max-width: 420px; position: relative; overflow: hidden; }
+  .login-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3)); }
+  .logo { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; letter-spacing: -1px; margin-bottom: 8px; }
+  .logo span { color: var(--accent); }
+  .login-subtitle { color: var(--muted); font-size: 14px; margin-bottom: 36px; }
+  .tab-bar { display: flex; gap: 4px; background: var(--surface2); border-radius: var(--radius-sm); padding: 4px; margin-bottom: 28px; }
+  .tab-btn { flex: 1; padding: 8px; border: none; background: transparent; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .form-input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 16px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 15px; outline: none; transition: border-color 0.2s; }
+  .form-input:focus { border-color: var(--accent); }
+  select.form-input { cursor: pointer; }
+  .btn { width: 100%; padding: 13px; border: none; border-radius: var(--radius-sm); font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .btn-primary   { background: var(--accent); color: #fff; margin-top: 8px; }
+  .btn-primary:hover:not(:disabled) { background: #6a4aee; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); margin-top: 0; }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-sm { width: auto; padding: 8px 16px; font-size: 13px; }
+  .error-msg { color: var(--danger); font-size: 13px; margin-top: 12px; text-align: center; min-height: 18px; }
+
+  /* APP */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .topbar-logo { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+  .topbar-logo span { color: var(--accent); }
+  .topbar-right { display: flex; align-items: center; gap: 16px; }
+  .user-chip { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 50px; padding: 6px 16px 6px 6px; }
+  .user-avatar-sm { width: 32px; height: 32px; border-radius: 50%; font-size: 18px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 1px solid var(--border); }
+  .user-name-sm { font-size: 13px; font-weight: 500; }
+  .logout-btn { background: none; border: 1px solid var(--border); color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+  .logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+  .main-content { padding: 32px; max-width: 1000px; margin: 0 auto; }
+
+  /* CARDS */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 24px; }
+  .card-title    { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  .card-subtitle { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+  /* STUDENT HERO */
+  .student-hero { background: linear-gradient(135deg, rgba(124,92,252,0.18), rgba(252,92,125,0.1)); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px 36px; display: flex; align-items: center; gap: 28px; margin-bottom: 24px; position: relative; overflow: hidden; }
+  .student-hero::after { content: '🎯'; position: absolute; right: 36px; top: 50%; transform: translateY(-50%); font-size: 72px; opacity: 0.15; }
+  .student-avatar-big { width: 84px; height: 84px; border-radius: 50%; font-size: 46px; display: flex; align-items: center; justify-content: center; background: var(--surface); border: 2px solid var(--accent); cursor: pointer; transition: transform 0.2s; position: relative; flex-shrink: 0; }
+  .student-avatar-big:hover { transform: scale(1.06); }
+  .avatar-edit-hint { position: absolute; bottom: 0; right: 0; background: var(--accent); border-radius: 50%; width: 22px; height: 22px; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+  .student-info h2 { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+  .student-info p { color: var(--muted); font-size: 14px; }
+
+  /* FINAL SCORE */
+  .final-score-display { background: linear-gradient(135deg, rgba(124,92,252,0.15), rgba(252,92,125,0.1)); border: 1px solid rgba(124,92,252,0.3); border-radius: var(--radius); padding: 32px; text-align: center; margin-bottom: 24px; }
+  .final-score-display .label { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .final-score-display .value { font-family: 'Syne', sans-serif; font-size: 72px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1; }
+  .final-score-display .sub { font-size: 15px; color: var(--muted); margin-top: 10px; }
+
+  /* KAHOOT CARDS */
+  .kahoot-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  @media(max-width:600px) { .kahoot-grid { grid-template-columns: 1fr; } }
+  .kahoot-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; text-align: center; position: relative; overflow: hidden; }
+  .kahoot-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+  .kahoot-card.k1::before { background: linear-gradient(90deg, #7c5cfc, #a78bfa); }
+  .kahoot-card.k2::before { background: linear-gradient(90deg, #fc5c7d, #f97316); }
+  .kahoot-card.k3::before { background: linear-gradient(90deg, #5cf7fc, #22d3ee); }
+  .kahoot-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+  .kahoot-score-big { font-family: 'Syne', sans-serif; font-size: 52px; font-weight: 800; line-height: 1; margin-bottom: 6px; }
+  .kahoot-card.k1 .kahoot-score-big { color: #a78bfa; }
+  .kahoot-card.k2 .kahoot-score-big { color: #fb7185; }
+  .kahoot-card.k3 .kahoot-score-big { color: #22d3ee; }
+  .kahoot-sub { font-size: 13px; color: var(--muted); }
+  .no-data-big { color: var(--border); font-size: 36px; font-weight: 700; }
+
+  /* PROGRESS */
+  .progress-bar-wrap { background: var(--surface2); border-radius: 4px; height: 8px; overflow: hidden; flex: 1; }
+  .progress-bar { height: 100%; border-radius: 4px; transition: width 1s cubic-bezier(.4,0,.2,1); }
+  .progress-bar.k1    { background: linear-gradient(90deg, #7c5cfc, #a78bfa); }
+  .progress-bar.k2    { background: linear-gradient(90deg, #fc5c7d, #f97316); }
+  .progress-bar.k3    { background: linear-gradient(90deg, #5cf7fc, #22d3ee); }
+  .progress-bar.total { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .bar-row { display: flex; align-items: center; gap: 12px; font-size: 13px; margin-bottom: 14px; }
+  .bar-label { width: 80px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .bar-val   { width: 52px; text-align: right; font-size: 13px; font-weight: 700; }
+
+  /* PILLS */
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .pill-high { background: rgba(74,222,128,0.15); color: var(--success); }
+  .pill-mid  { background: rgba(250,204,21,0.15);  color: var(--warning); }
+  .pill-low  { background: rgba(248,113,113,0.15); color: var(--danger); }
+  .pill-none { background: rgba(122,122,144,0.15); color: var(--muted); }
+
+  /* TEACHER */
+  .app-tabs { display: flex; gap: 4px; margin-bottom: 28px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+  .app-tab { padding: 10px 20px; border: none; background: none; color: var(--muted); font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; white-space: nowrap; }
+  .app-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  .section-title  { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; }
+  .section-subtitle { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media(max-width:768px) { .two-col { grid-template-columns: 1fr; } }
+  .form-row { display: flex; gap: 12px; }
+  .form-row .form-group { flex: 1; }
+
+  /* TABLE */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 500; }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .student-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .student-row:last-child { border-bottom: none; }
+  .student-row-left { display: flex; align-items: center; gap: 12px; }
+  .ava-xs { width: 36px; height: 36px; border-radius: 50%; font-size: 20px; display: flex; align-items: center; justify-content: center; background: var(--surface2); border: 1px solid var(--border); }
+
+  .empty-state { text-align: center; padding: 48px; color: var(--muted); }
+  .empty-icon  { font-size: 48px; margin-bottom: 12px; }
+
+  /* UPLOAD */
+  .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface2); }
+  .upload-zone:hover, .upload-zone.over { border-color: var(--accent); background: rgba(124,92,252,0.05); }
+  .upload-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-text { color: var(--muted); font-size: 14px; }
+  .upload-text strong { color: var(--text); }
+  #fileInput { display: none; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 32px; max-width: 480px; width: 90%; }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; margin-bottom: 20px; }
+  .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin-bottom: 24px; }
+  .emoji-btn { width: 44px; height: 44px; border-radius: 10px; border: 2px solid transparent; background: var(--surface2); font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .emoji-btn:hover { border-color: var(--accent); transform: scale(1.1); }
+  .emoji-btn.selected { border-color: var(--accent); background: rgba(124,92,252,0.2); }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--success); color: #000; padding: 12px 24px; border-radius: 50px; font-weight: 600; font-size: 14px; z-index: 999; transition: transform 0.3s; }
+  #toast.show { transform: translateX(-50%) translateY(0); }
+  #toast.err  { background: var(--danger); color: #fff; }
+
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .info-box { border: 1px solid rgba(124,92,252,0.3); background: rgba(124,92,252,0.05); border-radius: var(--radius); padding: 18px 22px; color: #c4b5fd; font-size: 14px; margin-bottom: 20px; line-height: 1.6; }
+  .warn-box { border: 1px solid rgba(250,204,21,0.3); background: rgba(250,204,21,0.05); border-radius: var(--radius); padding: 18px 22px; color: var(--warning); font-size: 14px; margin-bottom: 16px; }
+  .data-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(74,222,128,0.1); border: 1px solid rgba(74,222,128,0.25); color: var(--success); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="screen active">
+  <div class="login-box">
+    <div class="logo">Kahoot<span>Board</span></div>
+    <p class="login-subtitle">Portal de notas · Jose</p>
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="setTab('student')">Soy alumno</button>
+      <button class="tab-btn"        onclick="setTab('teacher')">Soy maestro</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Usuario</label>
+      <input id="loginUser" class="form-input" type="text" placeholder="Tu nombre de usuario" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña</label>
+      <input id="loginPass" class="form-input" type="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-primary" id="loginBtn" onclick="doLogin()">Entrar →</button>
+    <div id="loginError" class="error-msg"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appScreen" class="screen">
+  <nav class="topbar">
+    <div class="topbar-logo">Kahoot<span>Board</span></div>
+    <div class="topbar-right">
+      <div class="user-chip">
+        <div class="user-avatar-sm" id="topbarAvatar"></div>
+        <span class="user-name-sm"  id="topbarName"></span>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">Salir</button>
+    </div>
+  </nav>
+  <div class="main-content" id="mainContent"></div>
+</div>
+
+<!-- AVATAR MODAL -->
+<div class="modal-overlay" id="avatarModal">
+  <div class="modal">
+    <div class="modal-title">Elige tu avatar 🎨</div>
+    <div class="emoji-grid" id="emojiGrid"></div>
+    <div style="display:flex;gap:12px;">
+      <button class="btn btn-primary"   onclick="saveAvatar()">Guardar</button>
+      <button class="btn btn-secondary" onclick="closeAvatarModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════
+// API CLIENT
+// ════════════════════════════════════════════════════
+const API = '';   // mismo origen — Railway sirve frontend y backend juntos
+
+let authToken = localStorage.getItem('kb_token') || null;
+
+async function api(method, path, body, isFile = false) {
+  const opts = {
+    method,
+    headers: { Authorization: authToken ? `Bearer ${authToken}` : '' }
+  };
+  if (isFile) {
+    opts.body = body; // FormData
+  } else if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res  = await fetch(API + path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Error del servidor');
+  return data;
+}
+
+// ════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════
+let currentUser = null;
+let loginRole   = 'student';
+
+// Auto-login si hay token guardado
+window.addEventListener('load', async () => {
+  if (authToken) {
+    const saved = localStorage.getItem('kb_user');
+    if (saved) {
+      currentUser = JSON.parse(saved);
+      goApp();
+      return;
+    }
+  }
+  // mostrar login
+  document.getElementById('loginScreen').classList.add('active');
+});
+
+function setTab(role) {
+  loginRole = role;
+  document.querySelectorAll('.tab-btn').forEach((b,i) => b.classList.toggle('active', (role==='student'&&i===0)||(role==='teacher'&&i===1)));
+  document.getElementById('loginError').textContent = '';
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const err      = document.getElementById('loginError');
+  const btn      = document.getElementById('loginBtn');
+  if (!username || !password) { err.textContent = 'Completa todos los campos'; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span> Entrando...`;
+  err.textContent = '';
+
+  try {
+    const data = await api('POST', '/api/login', { username, password, role: loginRole });
+    authToken   = data.token;
+    currentUser = { role: data.role, displayName: data.displayName, avatar: data.avatar, username };
+    localStorage.setItem('kb_token', authToken);
+    localStorage.setItem('kb_user',  JSON.stringify(currentUser));
+    goApp();
+  } catch(e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Entrar →';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('loginScreen').classList.contains('active')) doLogin();
+});
+
+function goApp() {
+  document.getElementById('loginScreen').classList.remove('active');
+  document.getElementById('appScreen').classList.add('active');
+  document.getElementById('topbarAvatar').textContent = currentUser.avatar;
+  document.getElementById('topbarName').textContent   = currentUser.displayName;
+  currentUser.role === 'teacher' ? renderTeacher() : renderStudent();
+}
+
+function doLogout() {
+  authToken = null; currentUser = null;
+  localStorage.removeItem('kb_token');
+  localStorage.removeItem('kb_user');
+  document.getElementById('appScreen').classList.remove('active');
+  document.getElementById('loginScreen').classList.add('active');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginError').textContent = '';
+}
+
+// ════════════════════════════════════════════════════
+// TEACHER
+// ════════════════════════════════════════════════════
+let teacherTab = 'datos';
+
+function renderTeacher() {
+  document.getElementById('mainContent').innerHTML = `
+    <div class="section-header">
+      <div><div class="section-title">Panel del Maestro 🧑‍🏫</div><div class="section-subtitle">Gestiona notas y alumnos</div></div>
+    </div>
+    <div class="app-tabs">
+      <button class="app-tab ${teacherTab==='datos'?'active':''}"      onclick="switchT('datos')">📊 Ver notas</button>
+      <button class="app-tab ${teacherTab==='alumnos'?'active':''}"    onclick="switchT('alumnos')">👥 Alumnos</button>
+      <button class="app-tab ${teacherTab==='actualizar'?'active':''}" onclick="switchT('actualizar')">🔄 Actualizar notas</button>
+      <button class="app-tab ${teacherTab==='config'?'active':''}"     onclick="switchT('config')">⚙️ Configuración</button>
+    </div>
+    <div id="tContent"><div class="empty-state"><span class="spinner"></span></div></div>
+  `;
+  loadTeacherTab();
+}
+
+function switchT(t) { teacherTab = t; renderTeacher(); }
+
+async function loadTeacherTab() {
+  const c = document.getElementById('tContent');
+  try {
+    if (teacherTab === 'datos')      await renderTDatos(c);
+    else if (teacherTab === 'alumnos')    await renderTAlumnos(c);
+    else if (teacherTab === 'actualizar') renderTActualizar(c);
+    else                                  renderTConfig(c);
+  } catch(e) {
+    c.innerHTML = `<div class="warn-box">⚠️ Error cargando datos: ${e.message}</div>`;
+  }
+}
+
+// ── DATOS ──
+async function renderTDatos(c) {
+  const rows = await api('GET', '/api/teacher/sheet');
+  c.innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div><div class="card-title">Notas actuales</div><div class="card-subtitle" style="margin-bottom:0;">Kahoot 1 y 2 registrados · K3 pendiente</div></div>
+        <span class="data-badge">✓ ${rows.length} alumnos</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Alumno</th><th>K1</th><th>K2</th><th>K3</th><th>% Final</th></tr></thead>
+          <tbody>${rows.map(r=>`<tr>
+            <td><strong>${r.name}</strong></td>
+            <td>${pill(r.k1)}</td><td>${pill(r.k2)}</td><td>${pill(r.k3)}</td>
+            <td>${pill(r.final, true)}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+// ── ALUMNOS ──
+async function renderTAlumnos(c) {
+  const [students, sheet] = await Promise.all([
+    api('GET', '/api/teacher/students'),
+    api('GET', '/api/teacher/sheet')
+  ]);
+  const names = sheet.map(r => r.name);
+
+  c.innerHTML = `
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Agregar alumno</div>
+        <div class="card-subtitle">Crea usuario y contraseña para que el alumno pueda entrar desde cualquier dispositivo</div>
+        <div class="form-group">
+          <label class="form-label">Nombre (elige de la lista)</label>
+          <select id="stNameSel" class="form-input" onchange="document.getElementById('stName').value=this.value">
+            <option value="">— Selecciona un alumno —</option>
+            ${names.map(n=>`<option value="${n}">${n}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">O escríbelo manualmente</label>
+          <input id="stName" class="form-input" type="text" placeholder="Nombre exacto del alumno">
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">Usuario</label><input id="stUser" class="form-input" type="text" placeholder="juanp"></div>
+          <div class="form-group"><label class="form-label">Contraseña</label><input id="stPass" class="form-input" type="text" placeholder="123456"></div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:4px;" onclick="addStudent()">Agregar alumno +</button>
+        <div id="stMsg" style="margin-top:10px;font-size:13px;min-height:18px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Alumnos con acceso</div>
+        <div class="card-subtitle">${students.length} de ${names.length} con credenciales</div>
+        <div id="studentList">
+          ${students.length === 0
+            ? `<div class="empty-state"><div class="empty-icon">👤</div>Aún no hay alumnos registrados</div>`
+            : students.map(s=>`
+              <div class="student-row" id="sr-${s.id}">
+                <div class="student-row-left">
+                  <div class="ava-xs">${s.avatar}</div>
+                  <div>
+                    <div style="font-weight:500;font-size:14px;">${s.display_name}</div>
+                    <div style="color:var(--muted);font-size:12px;">@${s.username}</div>
+                  </div>
+                </div>
+                <button class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:var(--danger);border:none;" onclick="removeStudent(${s.id})">✕</button>
+              </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function addStudent() {
+  const name = document.getElementById('stName').value.trim();
+  const user = document.getElementById('stUser').value.trim();
+  const pass = document.getElementById('stPass').value.trim();
+  const msg  = document.getElementById('stMsg');
+  if (!name||!user||!pass) { msg.style.color='var(--danger)'; msg.textContent='Completa todos los campos'; return; }
+  try {
+    await api('POST', '/api/teacher/students', { username:user, password:pass, displayName:name });
+    showToast(`✓ ${name} agregado`);
+    switchT('alumnos');
+  } catch(e) {
+    msg.style.color='var(--danger)'; msg.textContent = e.message;
+  }
+}
+
+async function removeStudent(id) {
+  if (!confirm('¿Eliminar este alumno?')) return;
+  await api('DELETE', `/api/teacher/students/${id}`);
+  document.getElementById(`sr-${id}`)?.remove();
+  showToast('Alumno eliminado');
+}
+
+// ── ACTUALIZAR ──
+function renderTActualizar(c) {
+  c.innerHTML = `
+    <div class="info-box">
+      💡 Cuando tengas nuevas notas, descarga tu Excel y súbelo aquí. El servidor actualizará todos los datos y los alumnos verán las notas nuevas de inmediato desde cualquier dispositivo.
+    </div>
+    <div class="card">
+      <div class="card-title">Subir Excel actualizado</div>
+      <div class="card-subtitle">El archivo debe tener la hoja "KAHOOTS SEMANALES JOSE" con la misma estructura: Col A=Nombres, B=K1, C=K2, D=K3</div>
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <div class="upload-icon">📂</div>
+        <div class="upload-text"><strong>Haz clic o arrastra</strong> tu archivo Excel aquí<br><span style="font-size:12px;margin-top:4px;display:block;">.xlsx · .xls</span></div>
+      </div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <div id="uploadStatus" style="margin-top:14px;font-size:14px;color:var(--muted);min-height:20px;"></div>
+    </div>`;
+  bindUpload();
+}
+
+function bindUpload() {
+  const fi = document.getElementById('fileInput');
+  const uz = document.getElementById('uploadZone');
+  if (!fi) return;
+  fi.onchange = e => { if (e.target.files[0]) uploadFile(e.target.files[0]); };
+  uz.ondragover = e => { e.preventDefault(); uz.classList.add('over'); };
+  uz.ondragleave = () => uz.classList.remove('over');
+  uz.ondrop = e => { e.preventDefault(); uz.classList.remove('over'); if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); };
+}
+
+async function uploadFile(file) {
+  const status = document.getElementById('uploadStatus');
+  status.innerHTML = `<span class="spinner"></span> Subiendo y procesando...`;
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const data = await api('POST', '/api/teacher/sheet/upload', fd, true);
+    status.innerHTML = `<span style="color:var(--success)">✓ ${data.count} alumnos actualizados en el servidor. Los cambios ya son visibles para todos.</span>`;
+    showToast(`✓ ${data.count} alumnos actualizados`);
+  } catch(e) {
+    status.innerHTML = `<span style="color:var(--danger)">⚠️ ${e.message}</span>`;
+  }
+}
+
+// ── CONFIG ──
+function renderTConfig(c) {
+  c.innerHTML = `
+    <div class="card" style="max-width:480px;">
+      <div class="card-title">Cuenta del maestro</div>
+      <div class="card-subtitle">Cambia tus credenciales de acceso</div>
+      <div class="form-group"><label class="form-label">Nombre a mostrar</label><input id="cfgName" class="form-input" type="text" value="${currentUser.displayName}"></div>
+      <div class="form-group"><label class="form-label">Usuario</label><input id="cfgUser" class="form-input" type="text" value="${currentUser.username}"></div>
+      <div class="form-group"><label class="form-label">Nueva contraseña (vacío = no cambiar)</label><input id="cfgPass" class="form-input" type="password" placeholder="••••••••"></div>
+      <button class="btn btn-primary" onclick="saveCfg()">Guardar cambios</button>
+      <div id="cfgMsg" style="margin-top:10px;font-size:13px;min-height:18px;"></div>
+    </div>`;
+}
+
+async function saveCfg() {
+  const displayName = document.getElementById('cfgName').value.trim();
+  const username    = document.getElementById('cfgUser').value.trim();
+  const password    = document.getElementById('cfgPass').value;
+  const msg         = document.getElementById('cfgMsg');
+  if (!displayName||!username) { msg.style.color='var(--danger)'; msg.textContent='Nombre y usuario requeridos'; return; }
+  try {
+    await api('PATCH', '/api/teacher/config', { displayName, username, password });
+    currentUser.displayName = displayName;
+    currentUser.username    = username;
+    localStorage.setItem('kb_user', JSON.stringify(currentUser));
+    document.getElementById('topbarName').textContent = displayName;
+    msg.style.color = 'var(--success)'; msg.textContent = '✓ Guardado';
+    showToast('Configuración guardada');
+  } catch(e) {
+    msg.style.color='var(--danger)'; msg.textContent = e.message;
+  }
+}
+
+// ════════════════════════════════════════════════════
+// STUDENT
+// ════════════════════════════════════════════════════
+async function renderStudent() {
+  const mc = document.getElementById('mainContent');
+  mc.innerHTML = `<div style="text-align:center;padding:80px;color:var(--muted);"><span class="spinner"></span> Cargando tus notas...</div>`;
+
+  try {
+    const d = await api('GET', '/api/me/scores');
+    const k1 = d?.k1 ?? null, k2 = d?.k2 ?? null, k3 = d?.k3 ?? null, final = d?.final ?? null;
+
+    mc.innerHTML = `
+      <div class="student-hero">
+        <div class="student-avatar-big" onclick="openAvatarModal()" title="Cambiar avatar">
+          ${currentUser.avatar}
+          <div class="avatar-edit-hint">✏️</div>
+        </div>
+        <div class="student-info">
+          <h2>${currentUser.displayName}</h2>
+          <p>Toca tu avatar para personalizarlo · Notas del mes actual</p>
+        </div>
+      </div>
+
+      <div class="final-score-display">
+        <div class="label">Porcentaje final del mes</div>
+        <div class="value">${final !== null ? final+'%' : '—'}</div>
+        <div class="sub">${final !== null ? motivation(final) : 'Aún no hay datos registrados'}</div>
+      </div>
+
+      <div class="kahoot-grid">
+        ${kCard('Kahoot Semana 1', k1, 'k1')}
+        ${kCard('Kahoot Semana 2', k2, 'k2')}
+        ${kCard('Kahoot Semana 3', k3, 'k3')}
+      </div>
+
+      <div class="card">
+        <div class="card-title">Progreso visual</div>
+        <div class="card-subtitle">Tu desempeño en cada kahoot del mes</div>
+        ${[['Kahoot 1',k1,'k1'],['Kahoot 2',k2,'k2'],['Kahoot 3',k3,'k3'],['Promedio',final,'total']].map(([l,v,cls])=>`
+          <div class="bar-row">
+            <div class="bar-label">${l}</div>
+            <div class="progress-bar-wrap"><div class="progress-bar ${cls}" style="width:${v??0}%"></div></div>
+            <div class="bar-val">${v!==null?v+'%':'—'}</div>
+          </div>`).join('')}
+      </div>
+
+      ${!d ? `<div class="warn-box">⚠️ No se encontraron datos para <strong>${currentUser.displayName}</strong>. Consulta con tu maestro.</div>` : ''}
+    `;
+  } catch(e) {
+    mc.innerHTML = `<div class="warn-box">⚠️ Error cargando notas: ${e.message}</div>`;
+  }
+}
+
+function kCard(label, val, cls) {
+  return `<div class="kahoot-card ${cls}">
+    <div class="kahoot-label">${label}</div>
+    ${val!==null
+      ? `<div class="kahoot-score-big">${val}</div><div class="kahoot-sub">de 100 puntos</div>`
+      : `<div class="no-data-big">—</div><div class="kahoot-sub">Pendiente</div>`}
+  </div>`;
+}
+
+function motivation(p) {
+  if (p>=90) return '🏆 ¡Excelente! Eres de los mejores';
+  if (p>=80) return '🌟 ¡Muy buen trabajo, sigue así!';
+  if (p>=70) return '👍 Buen desempeño, casi en el top';
+  if (p>=55) return '📚 Bien, pero puedes dar más de ti';
+  return '💪 No te rindas, hay tiempo de mejorar en K3';
+}
+
+function pill(v, pct=false) {
+  if (v===null||v===undefined) return `<span class="pill pill-none">—</span>`;
+  const c = v>=80?'pill-high':v>=50?'pill-mid':'pill-low';
+  return `<span class="pill ${c}">${v}${pct?'%':''}</span>`;
+}
+
+// ════════════════════════════════════════════════════
+// AVATAR
+// ════════════════════════════════════════════════════
+const AVATARS = ['🐱','🐶','🦊','🐼','🐨','🦁','🐯','🐸','🦄','🐲','🦋','🐧','🦜','🐢','🦈','🐙','🌟','⚡','🔥','🌈','🍀','💎','🎮','🎸','🚀','🎯','🏆','👾','🎃','🤖'];
+let selAvatar = null;
+
+function openAvatarModal() {
+  selAvatar = currentUser.avatar || '🐱';
+  document.getElementById('emojiGrid').innerHTML = AVATARS.map(e=>
+    `<button class="emoji-btn ${e===selAvatar?'selected':''}" onclick="pickEmoji('${e}')">${e}</button>`).join('');
+  document.getElementById('avatarModal').classList.add('open');
+}
+function pickEmoji(e) {
+  selAvatar = e;
+  document.querySelectorAll('.emoji-btn').forEach(b=>b.classList.toggle('selected',b.textContent===e));
+}
+function closeAvatarModal() { document.getElementById('avatarModal').classList.remove('open'); }
+
+async function saveAvatar() {
+  if (!selAvatar) return;
+  await api('PATCH', '/api/me/avatar', { avatar: selAvatar });
+  currentUser.avatar = selAvatar;
+  localStorage.setItem('kb_user', JSON.stringify(currentUser));
+  document.getElementById('topbarAvatar').textContent = selAvatar;
+  closeAvatarModal();
+  showToast('¡Avatar actualizado!');
+  if (currentUser.role==='student') renderStudent();
+}
+
+document.getElementById('avatarModal').addEventListener('click', e=>{
+  if (e.target===document.getElementById('avatarModal')) closeAvatarModal();
+});
+
+// ════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════
+function showToast(msg, isErr=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = isErr ? 'err' : '';
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>
