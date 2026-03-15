@@ -13,7 +13,12 @@ const PORT   = process.env.PORT || 3000;
 const SECRET = process.env.JWT_SECRET || 'kahootboard-secret-2024';
 
 // ── Base de datos SQLite ──────────────────────────────────────────
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data.db');
+// En Railway usa el volume persistente en /app/data, localmente usa la carpeta del proyecto
+const DB_PATH = process.env.DB_PATH || (
+  require('fs').existsSync('/app/data')
+    ? '/app/data/data.db'
+    : path.join(__dirname, 'data.db')
+);
 const db = new Database(DB_PATH);
 
 db.exec(`
