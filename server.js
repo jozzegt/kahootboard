@@ -9,6 +9,22 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS students(id INTEGER PRIMARY KEY AUTOINCREMENT,username TEXT UNIQUE NOT NULL,password TEXT NOT NULL,display_name TEXT NOT NULL,avatar TEXT NOT NULL DEFAULT '🐱',nivel TEXT NOT NULL DEFAULT '');
   CREATE TABLE IF NOT EXISTS sheet_data(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,k1 REAL,k2 REAL,k3 REAL,final REAL,nivel TEXT NOT NULL DEFAULT '');
 `);
+// Migración automática — agrega columna nivel si no existe en bases de datos antiguas
+['students','sheet_data'].forEach(table=>{
+  try{
+    const cols=db.prepare(`PRAGMA table_info(${table})`).all().map(c=>c.name);
+    if(!cols.includes('nivel')){
+      db.prepare(`ALTER TABLE ${table} ADD COLUMN nivel TEXT NOT NULL DEFAULT ''`).run();
+      console.log(`✓ Migración: columna nivel agregada a ${table}`);
+    }
+  }catch(e){console.log(`Migración ${table}:`,e.message);}
+});
+// Migración reg_codes — crear si no existe
+if(!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='reg_codes'").get()){
+  db.prepare(`CREATE TABLE reg_codes(id INTEGER PRIMARY KEY AUTOINCREMENT,code TEXT UNIQUE NOT NULL,name TEXT NOT NULL,nivel TEXT NOT NULL DEFAULT '',used INTEGER NOT NULL DEFAULT 0)`).run();
+  console.log('✓ Migración: tabla reg_codes creada');
+}
+
 if(!db.prepare('SELECT id FROM teacher WHERE id=1').get())
   db.prepare('INSERT INTO teacher(id,username,password,display_name,avatar)VALUES(1,?,?,?,?)').run('maestro',bcrypt.hashSync('maestro123',10),'Maestro','👨‍🏫');
 
