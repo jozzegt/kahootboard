@@ -245,5 +245,107 @@ app.patch('/api/teacher/config',auth,tOnly,(req,res)=>{
   else db.prepare('UPDATE teacher SET display_name=?,username=? WHERE id=1').run(displayName,username);
   res.json({ok:true});
 });
+
+// ── Google Sheets sync ────────────────────────────────────────────
+const SHEET_ID   = '1wLxVM_3jTuxUehxD2K1EWCAq5uHITp8vVmn7AOtTYUA';
+const SHEET_NAME = 'kahoots';
+
+async function fetchGoogleSheet() {
+  const https = require('https');
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+  return new Promise((resolve,reject)=>{
+    https.get(url,res=>{
+      if(res.statusCode===302||res.statusCode===301){
+        https.get(res.headers.location,r2=>{let d='';r2.on('data',c=>d+=c);r2.on('end',()=>resolve(d));}).on('error',reject);
+        return;
+      }
+      let data='';
+      res.on('data',c=>data+=c);
+      res.on('end',()=>{
+        if(res.statusCode!==200)return reject(new Error(`HTTP ${res.statusCode}`));
+        resolve(data);
+      });
+    }).on('error',reject);
+  });
+}
+
+function parseSheetCSV(csv) {
+  const lines=csv.split('\n').filter(l=>l.trim());
+  const pct=v=>{if(!v||v.trim()===''||v.trim()==='-')return null;let n=parseFloat(v.replace('%','').replace(/"/g,'').replace(',','.'));if(isNaN(n))return null;if(n>0&&n<=1)n=Math.round(n*100);return Math.round(n);};
+  const nivelMap={'1':'Level 1','2':'Level 2','3':'Level 3','4':'Level 4','7':'Level 7'};
+  const results=[];
+  for(let i=1;i<lines.length;i++){
+    const cols=[];let cur='',inQ=false;
+    for(const ch of lines[i]){if(ch==='"')inQ=!inQ;else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}else cur+=ch;}
+    cols.push(cur.trim());
+    const nivelRaw=(cols[0]||'').replace(/"/g,'').trim();
+    const name=(cols[1]||'').replace(/"/g,'').trim();
+    if(!name)continue;
+    // Col C=K1, D=K2, E=K3, skip F, G=notas, H=final
+    const k1=pct(cols[2]),k2=pct(cols[3]),k3=pct(cols[4]);
+    const finalPct=pct(cols[7]); // columna H
+    const total=(k1||0)+(k2||0)+(k3||0);
+    const final=finalPct!==null?finalPct:(total>0?Math.round(total/3):null);
+    const nivel=nivelMap[nivelRaw]||nivelRaw||'';
+    results.push({name,k1,k2,k3,final,nivel});
+  }
+  return results;
+}
+
+// Sync automático desde Google Sheets
+app.post('/api/teacher/sheet/sync',auth,tOnly,async(req,res)=>{
+  try{
+    const csv=await fetchGoogleSheet();
+    const data=parseSheetCSV(csv);
+    if(data.length===0)return res.status(400).json({error:'No se encontraron datos en la hoja'});
+    db.transaction(()=>{
+      db.prepare('DELETE FROM sheet_data').run();
+      const ins=db.prepare('INSERT INTO sheet_data(name,k1,k2,k3,final,nivel)VALUES(?,?,?,?,?,?)');
+      data.forEach(r=>ins.run(r.name,r.k1,r.k2,r.k3,r.final,r.nivel));
+    })();
+    res.json({ok:true,count:data.length});
+  }catch(e){res.status(500).json({error:'Error al conectar con Google Sheets: '+e.message});}
+});
+
+// ── Crear código desde panel ──────────────────────────────────────
+app.post('/api/teacher/codes',auth,tOnly,(req,res)=>{
+  const{name,nivel}=req.body;
+  if(!name||!nivel)return res.status(400).json({error:'Nombre y nivel requeridos'});
+  // Verificar que no exista ya un código para ese nombre
+  const existing=db.prepare('SELECT * FROM reg_codes WHERE LOWER(TRIM(name))=LOWER(TRIM(?))').get(name);
+  if(existing)return res.status(409).json({error:'Ya existe un código para ese alumno',code:existing.code,used:existing.used});
+  // Generar código único
+  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code='';
+  do{code=Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join('');}
+  while(db.prepare('SELECT id FROM reg_codes WHERE code=?').get(code));
+  db.prepare('INSERT INTO reg_codes(code,name,nivel)VALUES(?,?,?)').run(code,name.trim(),nivel);
+  // Agregar a sheet_data si no existe aún
+  const inSheet=db.prepare('SELECT id FROM sheet_data WHERE LOWER(TRIM(name))=LOWER(TRIM(?))').get(name);
+  if(!inSheet)db.prepare('INSERT INTO sheet_data(name,k1,k2,k3,final,nivel)VALUES(?,?,?,?,?,?)').run(name.trim(),null,null,null,null,nivel);
+  res.json({ok:true,code,name:name.trim(),nivel});
+});
+
+// ── Eliminar código ───────────────────────────────────────────────
+app.delete('/api/teacher/codes/:id',auth,tOnly,(req,res)=>{
+  db.prepare('DELETE FROM reg_codes WHERE id=?').run(req.params.id);
+  res.json({ok:true});
+});
+
+// ── Export backup CSV ─────────────────────────────────────────────
+app.get('/api/teacher/export',auth,tOnly,(req,res)=>{
+  const students=db.prepare('SELECT username,display_name,nivel,avatar FROM students ORDER BY nivel,display_name').all();
+  const codes=db.prepare('SELECT code,name,nivel,used FROM reg_codes ORDER BY nivel,name').all();
+  let csv='ALUMNOS REGISTRADOS\n';
+  csv+='Usuario,Nombre,Nivel,Avatar\n';
+  students.forEach(s=>csv+=`${s.username},"${s.display_name}",${s.nivel},${s.avatar}\n`);
+  csv+='\nCÓDIGOS DE REGISTRO\n';
+  csv+='Código,Nombre,Nivel,Usado\n';
+  codes.forEach(c=>csv+=`${c.code},"${c.name}",${c.nivel},${c.used?'Sí':'No'}\n`);
+  res.setHeader('Content-Type','text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition','attachment; filename=youcan-backup.csv');
+  res.send('\uFEFF'+csv); // BOM para que Excel lo abra correctamente
+});
+
 app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.listen(PORT,()=>console.log(`✓ YOUCAN Portal en puerto ${PORT}`));

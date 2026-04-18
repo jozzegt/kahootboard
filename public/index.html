@@ -448,38 +448,135 @@ async function renderTCodigos(c) {
   const byNivel = {};
   codes.forEach(r => { const n=r.nivel||'Sin nivel'; if(!byNivel[n]) byNivel[n]=[]; byNivel[n].push(r); });
   let rows = '';
-  Object.entries(byNivel).forEach(([nivel, cs]) => {
-    rows += `<tr><td colspan="3" style="padding:14px 14px 6px;"><span class="data-badge">${nivel}</span></td></tr>`;
+  Object.entries(byNivel).sort().forEach(([nivel, cs]) => {
+    rows += `<tr><td colspan="4" style="padding:14px 14px 6px;"><span class="data-badge">${nivel}</span></td></tr>`;
     cs.forEach(r => { rows += `<tr>
       <td>${r.name}</td>
       <td><span class="code-chip">${r.code}</span></td>
       <td>${r.used ? '<span class="pill pill-high">✓ Registrado</span>' : '<span class="pill pill-none">Pendiente</span>'}</td>
+      <td>${!r.used ? `<button class="btn btn-sm" style="background:rgba(248,113,113,0.1);color:var(--danger);border:none;" onclick="deleteCode(${r.id})">✕</button>` : ''}</td>
     </tr>`; });
   });
-  c.innerHTML = `<div class="card">
-    <div class="card-title" style="margin-bottom:4px;">Códigos de registro</div>
-    <div class="card-subtitle">Comparte el código con cada alumno para que pueda crear su cuenta</div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Alumno</th><th>Código</th><th>Estado</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
-  </div>`;
+  c.innerHTML = `
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Nuevo código</div>
+        <div class="card-subtitle" style="font-family:'DM Sans',sans-serif;text-transform:none;">Crea un código para un alumno nuevo sin necesidad de actualizar el servidor</div>
+        <div class="form-group"><label class="form-label">Nombre completo del alumno</label><input id="newCodeName" class="form-input" type="text" placeholder="Ej: María García"></div>
+        <div class="form-group">
+          <label class="form-label">Nivel</label>
+          <select id="newCodeNivel" class="form-input">
+            <option value="">— Selecciona —</option>
+            <option value="Level 1">Level 1</option>
+            <option value="Level 2">Level 2</option>
+            <option value="Level 3">Level 3</option>
+            <option value="Level 4">Level 4</option>
+            <option value="Level 7">Level 7</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" style="margin-top:4px;" onclick="createCode()">Generar código +</button>
+        <div id="newCodeResult" style="margin-top:12px;font-size:14px;min-height:20px;font-family:'DM Sans',sans-serif;"></div>
+      </div>
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div>
+            <div class="card-title" style="margin-bottom:2px;">Backup</div>
+            <div style="color:var(--muted);font-size:13px;font-family:'DM Sans',sans-serif;">Descarga lista de alumnos y códigos</div>
+          </div>
+          <a href="/api/teacher/export" onclick="addAuthHeader(event)" class="btn btn-sm btn-secondary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">⬇️ Descargar CSV</a>
+        </div>
+        <div class="info-box" style="font-size:13px;margin-bottom:0;">El archivo incluye todos los alumnos registrados con su usuario y nivel, más todos los códigos con su estado.</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="margin-bottom:4px;">Todos los códigos</div>
+      <div class="card-subtitle">${codes.length} códigos · ${codes.filter(c=>c.used).length} registrados · ${codes.filter(c=>!c.used).length} pendientes</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Alumno</th><th>Código</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>`;
+}
+
+async function createCode() {
+  const name = document.getElementById('newCodeName').value.trim();
+  const nivel = document.getElementById('newCodeNivel').value;
+  const result = document.getElementById('newCodeResult');
+  if (!name||!nivel) { result.style.color='var(--danger)'; result.textContent='Completa nombre y nivel'; return; }
+  try {
+    const data = await api('POST','/api/teacher/codes',{name,nivel});
+    result.style.color='var(--success)';
+    result.innerHTML=`✓ Código generado: <strong style="font-family:'League Spartan',sans-serif;letter-spacing:1px;font-size:16px;">${data.code}</strong>`;
+    document.getElementById('newCodeName').value='';
+    document.getElementById('newCodeNivel').value='';
+    showToast(`Código ${data.code} creado para ${name}`);
+    setTimeout(()=>switchT('codigos'), 1500);
+  } catch(e) {
+    if(e.message.includes('Ya existe')) { result.style.color='var(--warning)'; result.textContent=e.message; }
+    else { result.style.color='var(--danger)'; result.textContent=e.message; }
+  }
+}
+
+async function deleteCode(id) {
+  if (!confirm('¿Eliminar este código? El alumno no podrá registrarse con él.')) return;
+  await api('DELETE',`/api/teacher/codes/${id}`);
+  showToast('Código eliminado');
+  switchT('codigos');
+}
+
+function addAuthHeader(e) {
+  // Para la descarga del CSV necesitamos pasar el token
+  e.preventDefault();
+  fetch('/api/teacher/export', { headers: { Authorization: `Bearer ${authToken}` } })
+    .then(r => r.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href=url; a.download='youcan-backup.csv'; a.click();
+      URL.revokeObjectURL(url);
+    }).catch(()=>showToast('Error al descargar',true));
 }
 
 function renderTActualizar(c) {
   c.innerHTML = `
-    <div class="info-box">💡 Sube tu Excel actualizado y todos los alumnos verán sus nuevas notas de inmediato desde cualquier dispositivo.</div>
-    <div class="card">
-      <div class="card-title">Subir Excel actualizado</div>
-      <div class="card-subtitle">Misma estructura: Col A=NIVEL, B=ALUMNOS, C=K1, D=K2, E=K3</div>
-      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
-        <div class="upload-icon">📂</div>
-        <div class="upload-text"><strong>Haz clic o arrastra</strong> tu archivo Excel aquí<br><span style="font-size:12px;margin-top:4px;display:block;">.xlsx · .xls</span></div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">🔗 Sincronizar Google Sheets</div>
+        <div class="card-subtitle" style="font-family:'DM Sans',sans-serif;text-transform:none;">Conectado a tu hoja "kahoots" · Se actualiza con los datos más recientes</div>
+        <div class="info-box" style="font-size:13px;">Cada vez que edites notas en Google Sheets, pulsa este botón para que los alumnos vean los datos actualizados.</div>
+        <button class="btn btn-primary" id="syncBtn" onclick="syncSheets()">🔄 Sincronizar ahora</button>
+        <div id="syncStatus" style="margin-top:12px;font-size:14px;min-height:20px;font-family:'DM Sans',sans-serif;"></div>
       </div>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
-      <div id="uploadStatus" style="margin-top:14px;font-size:14px;color:var(--muted);min-height:20px;font-family:'DM Sans',sans-serif;"></div>
+      <div class="card">
+        <div class="card-title">📂 Subir Excel</div>
+        <div class="card-subtitle" style="font-family:'DM Sans',sans-serif;text-transform:none;">Alternativa: sube un archivo Excel directamente</div>
+        <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+          <div class="upload-icon">📂</div>
+          <div class="upload-text"><strong>Haz clic o arrastra</strong> tu archivo Excel<br><span style="font-size:12px;margin-top:4px;display:block;">.xlsx · .xls</span></div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+        <div id="uploadStatus" style="margin-top:14px;font-size:14px;color:var(--muted);min-height:20px;font-family:'DM Sans',sans-serif;"></div>
+      </div>
     </div>`;
   bindUpload();
+}
+
+async function syncSheets() {
+  const btn = document.getElementById('syncBtn');
+  const status = document.getElementById('syncStatus');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Sincronizando...';
+  try {
+    const data = await api('POST','/api/teacher/sheet/sync');
+    status.style.color='var(--success)';
+    status.textContent=`✓ ${data.count} alumnos actualizados desde Google Sheets`;
+    showToast(`✓ ${data.count} alumnos actualizados`);
+  } catch(e) {
+    status.style.color='var(--danger)';
+    status.textContent='⚠️ ' + e.message;
+    showToast(e.message, true);
+  } finally {
+    btn.disabled=false; btn.innerHTML='🔄 Sincronizar ahora';
+  }
 }
 
 function bindUpload() {
